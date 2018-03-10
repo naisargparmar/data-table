@@ -164,6 +164,13 @@ abstract class DataTable
     {
         $queryBuilder->where(function($query){
             foreach($this->searchableColumns() as $key => $keyType) {
+
+                if(is_array($keyType)){
+
+                    continue;
+
+                }
+
                 if($keyType == 'string') {
                     $query->orWhere($this->getSqlColumn($key), 'like', '%'.request()->get('filters').'%');
                 } else if($keyType == 'date') {
