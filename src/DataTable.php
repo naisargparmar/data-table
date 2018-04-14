@@ -105,44 +105,93 @@ abstract class DataTable
     public function response(&$queryBuilder, &$returnData)
     {
         if(request()->get('download') == 'csv') {
-
+            // output headers so that the file is downloaded rather than displayed
+            header('Content-type: text/csv');
+            header('Content-Disposition: attachment; filename="'.$this->uniqueID . time().'.csv"');
+             
+            // do not cache the file
+            header('Pragma: no-cache');
+            header('Expires: 0');
+             
+            // create a file pointer connected to the output stream
+            $file = fopen('php://output', 'w');
+             
+            // send the column headers
             $downloadColumns = $this->downloadableColumns();
-
-            $data = $queryBuilder->get();
-            if($data && !is_array($data)) {
-                $data = $data->toArray();
-            }
-
-            $returnData = [];
+            $temp_header = [];
             foreach($downloadColumns as $downloadColumnKey => $downloadColumnVal) {
-                $returnData[0][$downloadColumnKey] = $downloadColumnVal;
+                array_push($temp_header, $downloadColumnVal);
             }
 
-            if(!empty($data)) {
-                foreach($data as $row) {
-                    $row = (array) $row;
-                    $tmpArray = [];
-                    foreach($downloadColumns as $downloadColumnKey => $downloadColumnVal) {
-                        if(method_exists($this, "getColumn".studly_case($downloadColumnKey))) {
-                            $val = call_user_func_array(array($this, "getColumn".studly_case($downloadColumnKey)), array($row, 'download'));
-                        } else if( isset($row[$downloadColumnKey]) ) {
-                            $val = $row[$downloadColumnKey];
-                        } else {
-                            $val = "";
+            fputcsv($file, $temp_header);
+            fclose($file);
+
+            $queryBuilder->chunk(1, function ($rows, $downloadColumns) {
+                $downloadColumns = $this->downloadableColumns();
+                $searchableColumns = $this->searchableColumns();
+
+                $file = fopen('php://output', 'w');
+                $temp_data = [];
+                foreach ($rows->toArray() as $key => $value) {
+                    $temp_data_sub = [];
+                    foreach ($downloadColumns as $key_col => $value_col) {
+                        if (isset($searchableColumns[$key_col]) && gettype($searchableColumns[$key_col]) == 'array') {
+                            array_push($temp_data_sub, $searchableColumns[$key_col][$value->$key_col]);
                         }
-                        $tmpArray[$downloadColumnKey] = $val;
+                        else {
+                            array_push($temp_data_sub, $value->$key_col);
+                        }
                     }
-                    $returnData[] = $tmpArray;
+                    array_push($temp_data, $temp_data_sub);
                 }
-            }
+                
+                // output each row of the data
+                foreach ($temp_data as $row)
+                {
+                    fputcsv($file, $row);
+                }
+                fclose($file);
+            });
+            
+            exit();
+            
+            // $downloadColumns = $this->downloadableColumns();
 
-            Excel::create($this->uniqueID . time(), function($excel) use ($returnData) {
-                $excel->sheet('Sheet 1', function($sheet) use ($returnData) {
-                    $sheet->setAllBorders('thin');
-                    $sheet->fromArray($returnData, null, 'A1', false, false);
-                    $sheet->setAutoSize(true);
-                });
-            })->export('csv');
+            // $data = $queryBuilder->get();
+            // if($data && !is_array($data)) {
+            //     $data = $data->toArray();
+            // }
+
+            // $returnData = [];
+            // foreach($downloadColumns as $downloadColumnKey => $downloadColumnVal) {
+            //     $returnData[0][$downloadColumnKey] = $downloadColumnVal;
+            // }
+
+            // if(!empty($data)) {
+            //     foreach($data as $row) {
+            //         $row = (array) $row;
+            //         $tmpArray = [];
+            //         foreach($downloadColumns as $downloadColumnKey => $downloadColumnVal) {
+            //             if(method_exists($this, "getColumn".studly_case($downloadColumnKey))) {
+            //                 $val = call_user_func_array(array($this, "getColumn".studly_case($downloadColumnKey)), array($row, 'download'));
+            //             } else if( isset($row[$downloadColumnKey]) ) {
+            //                 $val = $row[$downloadColumnKey];
+            //             } else {
+            //                 $val = "";
+            //             }
+            //             $tmpArray[$downloadColumnKey] = $val;
+            //         }
+            //         $returnData[] = $tmpArray;
+            //     }
+            // }
+
+            // Excel::create($this->uniqueID . time(), function($excel) use ($returnData) {
+            //     $excel->sheet('Sheet 1', function($sheet) use ($returnData) {
+            //         $sheet->setAllBorders('thin');
+            //         $sheet->fromArray($returnData, null, 'A1', false, false);
+            //         $sheet->setAutoSize(true);
+            //     });
+            // })->export('csv');
 
         } else {
             $data = $queryBuilder->paginate( request()->get('limit') )->toArray();
