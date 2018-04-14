@@ -106,6 +106,7 @@ abstract class DataTable
     {
         if(request()->get('download') == 'csv') {
 
+
             $downloadColumns = $this->downloadableColumns();
 
             $data = $queryBuilder->get();
